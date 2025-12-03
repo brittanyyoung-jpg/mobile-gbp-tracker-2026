@@ -1,0 +1,142 @@
+import React from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { TrendingUp, TrendingDown, Minus, Crown, Building2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+export default function CompetitorComparison({ rankings = [], competitors = [], businessName }) {
+  // Aggregate competitor data
+  const competitorStats = {};
+  
+  // Initialize with your business
+  competitorStats[businessName] = {
+    name: businessName,
+    isYou: true,
+    totalRankings: 0,
+    avgRank: 0,
+    inMapPack: 0,
+    ranks: []
+  };
+  
+  // Initialize competitors
+  competitors.forEach(c => {
+    competitorStats[c.business_name] = {
+      name: c.name,
+      businessName: c.business_name,
+      isYou: false,
+      totalRankings: 0,
+      avgRank: 0,
+      inMapPack: 0,
+      ranks: []
+    };
+  });
+
+  // Process rankings
+  rankings.forEach(r => {
+    // Your rankings
+    if (r.rank) {
+      competitorStats[businessName].ranks.push(r.rank);
+      competitorStats[businessName].totalRankings++;
+      if (r.in_map_pack) competitorStats[businessName].inMapPack++;
+    }
+    
+    // Competitor rankings
+    if (r.competitor_rankings) {
+      r.competitor_rankings.forEach(cr => {
+        if (competitorStats[cr.name]) {
+          if (cr.rank) {
+            competitorStats[cr.name].ranks.push(cr.rank);
+            competitorStats[cr.name].totalRankings++;
+            if (cr.in_map_pack) competitorStats[cr.name].inMapPack++;
+          }
+        }
+      });
+    }
+  });
+
+  // Calculate averages
+  Object.values(competitorStats).forEach(stat => {
+    if (stat.ranks.length > 0) {
+      stat.avgRank = (stat.ranks.reduce((a, b) => a + b, 0) / stat.ranks.length).toFixed(1);
+    } else {
+      stat.avgRank = '—';
+    }
+  });
+
+  // Sort by average rank
+  const sorted = Object.values(competitorStats)
+    .filter(s => s.totalRankings > 0 || s.isYou)
+    .sort((a, b) => {
+      if (a.avgRank === '—') return 1;
+      if (b.avgRank === '—') return -1;
+      return parseFloat(a.avgRank) - parseFloat(b.avgRank);
+    });
+
+  return (
+    <Card className="shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Building2 className="h-4 w-4" />
+          Competitor Comparison
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {sorted.map((stat, idx) => (
+          <div
+            key={stat.businessName || stat.name}
+            className={cn(
+              'flex items-center justify-between p-3 rounded-xl border',
+              stat.isYou ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-100'
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                'w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold',
+                idx === 0 ? 'bg-amber-100 text-amber-700' :
+                idx === 1 ? 'bg-slate-200 text-slate-600' :
+                idx === 2 ? 'bg-orange-100 text-orange-700' :
+                'bg-slate-100 text-slate-500'
+              )}>
+                {idx === 0 ? <Crown className="h-4 w-4" /> : idx + 1}
+              </div>
+              <div>
+                <p className={cn(
+                  'text-sm font-medium',
+                  stat.isYou ? 'text-blue-900' : 'text-slate-900'
+                )}>
+                  {stat.name}
+                  {stat.isYou && (
+                    <Badge className="ml-2 text-xs bg-blue-600">You</Badge>
+                  )}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {stat.totalRankings} rankings tracked
+                </p>
+              </div>
+            </div>
+            
+            <div className="text-right">
+              <p className={cn(
+                'text-lg font-bold',
+                stat.avgRank !== '—' && parseFloat(stat.avgRank) <= 3 ? 'text-emerald-600' :
+                stat.avgRank !== '—' && parseFloat(stat.avgRank) <= 10 ? 'text-blue-600' :
+                'text-slate-600'
+              )}>
+                {stat.avgRank}
+              </p>
+              <p className="text-xs text-slate-500">
+                {stat.inMapPack} in 3-pack
+              </p>
+            </div>
+          </div>
+        ))}
+        
+        {sorted.length === 0 && (
+          <div className="text-center py-6 text-slate-500 text-sm">
+            No competitor data yet. Add competitors and run a rank check.
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
