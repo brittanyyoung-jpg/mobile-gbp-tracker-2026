@@ -1,0 +1,52 @@
+{
+  "name": "KeywordSuggestion",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to project"
+    },
+    "seed_keyword": {
+      "type": "string",
+      "description": "Original keyword used for research"
+    },
+    "suggested_keyword": {
+      "type": "string",
+      "description": "Suggested keyword"
+    },
+    "search_volume": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "description": "Estimated search volume"
+    },
+    "competition": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "description": "Competition level"
+    },
+    "relevance_score": {
+      "type": "number",
+      "description": "Relevance to business (1-100)"
+    },
+    "is_local_intent": {
+      "type": "boolean",
+      "description": "Whether keyword has local intent"
+    },
+    "added_to_tracking": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "project_id",
+    "suggested_keyword"
+  ]
+}
