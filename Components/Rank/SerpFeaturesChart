@@ -1,0 +1,78 @@
+import React, { useMemo } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { SERP_FEATURES } from './SerpFeaturesBadges';
+
+const COLORS = [
+  '#22c55e', '#3b82f6', '#ef4444', '#a855f7', '#f59e0b',
+  '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#8b5cf6'
+];
+
+export default function SerpFeaturesChart({ rankings = [], height = 250 }) {
+  const chartData = useMemo(() => {
+    const featureCounts = {};
+    
+    rankings.forEach(r => {
+      if (r.serp_features) {
+        r.serp_features.forEach(feature => {
+          featureCounts[feature] = (featureCounts[feature] || 0) + 1;
+        });
+      }
+    });
+
+    return Object.entries(featureCounts)
+      .map(([feature, count]) => ({
+        feature,
+        label: SERP_FEATURES[feature]?.label || feature,
+        count,
+        percentage: Math.round((count / rankings.length) * 100)
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+  }, [rankings]);
+
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3">
+          <p className="font-semibold text-slate-900">{data.label}</p>
+          <p className="text-sm text-slate-600">
+            Found in {data.count} searches ({data.percentage}%)
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  if (chartData.length === 0) {
+    return (
+      <div style={{ height }} className="flex items-center justify-center text-slate-500 text-sm">
+        No SERP feature data yet
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+          <XAxis type="number" tick={{ fontSize: 11, fill: '#64748b' }} />
+          <YAxis 
+            type="category" 
+            dataKey="label" 
+            tick={{ fontSize: 11, fill: '#64748b' }}
+            width={100}
+          />
+          <Tooltip content={<CustomTooltip />} />
+          <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+            {chartData.map((entry, index) => (
+              <Cell key={entry.feature} fill={COLORS[index % COLORS.length]} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
