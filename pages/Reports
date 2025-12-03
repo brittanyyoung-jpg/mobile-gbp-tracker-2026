@@ -1,0 +1,285 @@
+import React, { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { 
+  ArrowLeft, FileText, Download, Send, Loader2, Calendar,
+  TrendingUp, TrendingDown, Target, BarChart3, CheckCircle
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { format, subDays, startOfWeek, startOfMonth } from 'date-fns';
+import SerpFeaturesChart from '@/components/rank/SerpFeaturesChart';
+
+export default function Reports() {
+  const params = new URLSearchParams(window.location.search);
+  const projectId = params.get('project_id');
+  const queryClient = useQueryClient();
+  const [generating, setGenerating] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => base44.entities.Project.filter({ id: projectId }),
+    select: (data) => data[0],
+    enabled: !!projectId
+  });
+
+  const { data: rankings = [] } = useQuery({
+    queryKey: ['rankings', projectId],
+    queryFn: () => base44.entities.RankingData.filter({ project_id: projectId }, '-check_date', 1000),
+    enabled: !!projectId
+  });
+
+  const { data: reports = [], isLoading: loadingReports } = useQuery({
+    queryKey: ['reports', projectId],
+    queryFn: () => base44.entities.Report.filter({ project_id: projectId }, '-created_date', 20),
+    enabled: !!projectId
+  });
+
+  const currentStats = useMemo(() => {
+    const latest = rankings.reduce((acc, r) => {
+      const key = `${r.keyword}-${r.lat}-${r.lng}`;
+      if (!acc[key] || new Date(r.check_date) > new Date(acc[key].check_date)) {
+        acc[key] = r;
+      }
+      return acc;
+    }, {});
+    const latestList = Object.values(latest);
+    
+    const inMapPack = latestList.filter(r => r.in_map_pack).length;
+    const ranking = latestList.filter(r => r.rank && r.rank <= 20);
+    const avgRank = ranking.length > 0
+      ? (ranking.reduce((sum, r) => sum + r.rank, 0) / ranking.length).toFixed(1)
+      : null;
+
+    // Keyword performance
+    const keywordPerf = {};
+    latestList.forEach(r => {
+      if (!keywordPerf[r.keyword]) {
+        keywordPerf[r.keyword] = { ranks: [], inMapPack: 0 };
+      }
+      if (r.rank) keywordPerf[r.keyword].ranks.push(r.rank);
+      if (r.in_map_pack) keywordPerf[r.keyword].inMapPack++;
+    });
+
+    let topKeyword = null, worstKeyword = null;
+    let bestAvg = 100, worstAvg = 0;
+    Object.entries(keywordPerf).forEach(([kw, data]) => {
+      if (data.ranks.length > 0) {
+        const avg = data.ranks.reduce((a, b) => a + b, 0) / data.ranks.length;
+        if (avg < bestAvg) { bestAvg = avg; topKeyword = kw; }
+        if (avg > worstAvg) { worstAvg = avg; worstKeyword = kw; }
+      }
+    });
+
+    // SERP features
+    const serpCounts = {};
+    latestList.forEach(r => {
+      if (r.serp_features) {
+        r.serp_features.forEach(f => {
+          serpCounts[f] = (serpCounts[f] || 0) + 1;
+        });
+      }
+    });
+
+    return {
+      totalLocations: latestList.length,
+      inMapPack,
+      mapPackPercent: latestList.length > 0 ? Math.round((inMapPack / latestList.length) * 100) : 0,
+      avgRank,
+      topKeyword,
+      worstKeyword,
+      serpCounts,
+      latestList
+    };
+  }, [rankings]);
+
+  const generateReport = async (type) => {
+    setGenerating(true);
+    const today = new Date();
+    let dateFrom, dateTo = format(today, 'yyyy-MM-dd');
+    
+    if (type === 'daily') {
+      dateFrom = format(subDays(today, 1), 'yyyy-MM-dd');
+    } else if (type === 'weekly') {
+      dateFrom = format(startOfWeek(today), 'yyyy-MM-dd');
+    } else {
+      dateFrom = format(startOfMonth(today), 'yyyy-MM-dd');
+    }
+
+    await base44.entities.Report.create({
+      project_id: projectId,
+      report_type: type,
+      date_from: dateFrom,
+      date_to: dateTo,
+      summary: {
+        avg_rank: parseFloat(currentStats.avgRank) || 0,
+        rank_change: 0,
+        map_pack_percentage: currentStats.mapPackPercent,
+        top_keyword: currentStats.topKeyword,
+        worst_keyword: currentStats.worstKeyword
+      },
+      serp_features_summary: currentStats.serpCounts,
+      status: 'generated'
+    });
+
+    queryClient.invalidateQueries(['reports', projectId]);
+    setGenerating(false);
+  };
+
+  const sendReport = async (report) => {
+    if (!project?.report_email) return;
+    setSending(true);
+    
+    const subject = `${project.name} - ${report.report_type.charAt(0).toUpperCase() + report.report_type.slice(1)} Ranking Report`;
+    const body = `
+      <h2>${project.name} Ranking Report</h2>
+      <p>Report Period: ${format(new Date(report.date_from), 'MMM d, yyyy')} - ${format(new Date(report.date_to), 'MMM d, yyyy')}</p>
+      
+      <h3>Summary</h3>
+      <ul>
+        <li><strong>Average Rank:</strong> ${report.summary?.avg_rank || 'N/A'}</li>
+        <li><strong>Map Pack Visibility:</strong> ${report.summary?.map_pack_percentage || 0}%</li>
+        <li><strong>Top Performing Keyword:</strong> ${report.summary?.top_keyword || 'N/A'}</li>
+        <li><strong>Needs Improvement:</strong> ${report.summary?.worst_keyword || 'N/A'}</li>
+      </ul>
+      
+      <p>View full details in your dashboard.</p>
+    `;
+
+    await base44.integrations.Core.SendEmail({
+      to: project.report_email,
+      subject,
+      body
+    });
+
+    await base44.entities.Report.update(report.id, { 
+      status: 'sent',
+      sent_to: project.report_email
+    });
+
+    queryClient.invalidateQueries(['reports', projectId]);
+    setSending(false);
+  };
+
+  if (!projectId) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="text-center">
+          <p className="text-slate-500 mb-4">No project selected</p>
+          <Link to={createPageUrl('Dashboard')}>
+            <Button>Back to Dashboard</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 pb-24">
+      {/* Header */}
+      <div className="bg-white border-b border-slate-100 px-4 py-4">
+        <div className="max-w-lg mx-auto flex items-center gap-3">
+          <Link to={createPageUrl(`ProjectDetail?id=${projectId}`)}>
+            <Button variant="ghost" size="icon" className="h-9 w-9">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-lg font-semibold text-slate-900">Reports</h1>
+            <p className="text-xs text-slate-500">{project?.name}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-lg mx-auto px-4 py-6 space-y-5">
+        {/* Current Summary Card */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Current Performance
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-slate-50 rounded-xl p-3 text-center">
+                <p className="text-xs text-slate-500">Avg Rank</p>
+                <p className="text-2xl font-bold text-slate-900">{currentStats.avgRank || '—'}</p>
+              </div>
+              <div className="bg-emerald-50 rounded-xl p-3 text-center">
+                <p className="text-xs text-emerald-600">Map Pack</p>
+                <p className="text-2xl font-bold text-emerald-700">{currentStats.mapPackPercent}%</p>
+              </div>
+            </div>
+            
+            {currentStats.topKeyword && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg">
+                  <span className="text-xs text-green-700">Top Keyword</span>
+                  <span className="text-sm font-medium text-green-800">{currentStats.topKeyword}</span>
+                </div>
+                {currentStats.worstKeyword && currentStats.worstKeyword !== currentStats.topKeyword && (
+                  <div className="flex items-center justify-between p-2 bg-amber-50 rounded-lg">
+                    <span className="text-xs text-amber-700">Needs Work</span>
+                    <span className="text-sm font-medium text-amber-800">{currentStats.worstKeyword}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Generate Report */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Generate Report
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => generateReport('daily')}
+                disabled={generating}
+                className="flex-1"
+              >
+                Daily
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => generateReport('weekly')}
+                disabled={generating}
+                className="flex-1"
+              >
+                Weekly
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => generateReport('monthly')}
+                disabled={generating}
+                className="flex-1"
+              >
+                Monthly
+              </Button>
+            </div>
+            {generating && (
+              <div className="flex items-center justify-center gap-2 mt-3 text-sm text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Generating report...
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* SERP Features Summary */}
+ 
