@@ -1,0 +1,64 @@
+import React from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { format } from 'date-fns';
+
+export default function RankingTrendChart({ data = [], height = 300 }) {
+  const chartData = data.map(d => ({
+    ...d,
+    date: format(new Date(d.check_date), 'MMM d'),
+    displayRank: d.rank || 40
+  })).sort((a, b) => new Date(a.check_date) - new Date(b.check_date));
+
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3">
+          <p className="text-xs text-slate-500">{data.date}</p>
+          <p className="text-sm font-semibold text-slate-900 mt-1">
+            Rank: {data.rank || 'Not ranking'}
+          </p>
+          {data.in_map_pack && (
+            <span className="inline-block mt-1 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">
+              In 3-Pack
+            </span>
+          )}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <XAxis 
+            dataKey="date" 
+            tick={{ fontSize: 11, fill: '#64748b' }}
+            axisLine={{ stroke: '#e2e8f0' }}
+            tickLine={false}
+          />
+          <YAxis 
+            reversed 
+            domain={[1, 20]}
+            tick={{ fontSize: 11, fill: '#64748b' }}
+            axisLine={{ stroke: '#e2e8f0' }}
+            tickLine={false}
+            label={{ value: 'Rank', angle: -90, position: 'insideLeft', fontSize: 11, fill: '#64748b' }}
+          />
+          <Tooltip content={<CustomTooltip />} />
+          <Line
+            type="monotone"
+            dataKey="displayRank"
+            stroke="#3b82f6"
+            strokeWidth={2}
+            dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }}
+            activeDot={{ r: 6, fill: '#3b82f6' }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
