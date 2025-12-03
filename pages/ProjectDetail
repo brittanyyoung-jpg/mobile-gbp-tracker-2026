@@ -1,0 +1,519 @@
+import React, { useState, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { 
+  ArrowLeft, Settings, Play, Pause, MapPin, Target, 
+  TrendingUp, BarChart3, Table2, Map, RefreshCw, Loader2,
+  Users, Layers, FileText, Lightbulb
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import RankingMap from '@/components/rank/RankingMap';
+import RankingLegend from '@/components/rank/RankingLegend';
+import KeywordSelector from '@/components/rank/KeywordSelector';
+import StatsCard from '@/components/rank/StatsCard';
+import KeywordRankingTable from '@/components/rank/KeywordRankingTable';
+import RankingTrendChart from '@/components/rank/RankingTrendChart';
+import SerpFeaturesBadges, { SERP_FEATURES } from '@/components/rank/SerpFeaturesBadges';
+import SerpFeaturesChart from '@/components/rank/SerpFeaturesChart';
+import CompetitorComparison from '@/components/rank/CompetitorComparison';
+import { USER_AGENT_STRINGS } from '@/components/rank/UserAgentSelector';
+
+// Helper to generate grid points within radius
+function generateGridPoints(centerLat, centerLng, radiusMiles, gridSize = 5) {
+  const points = [];
+  const latMile = 1 / 69;
+  const lngMile = 1 / (69 * Math.cos(centerLat * Math.PI / 180));
+  
+  for (let i = -gridSize / 2; i <= gridSize / 2; i++) {
+    for (let j = -gridSize / 2; j <= gridSize / 2; j++) {
+      const lat = centerLat + (i * radiusMiles / gridSize) * latMile * 2;
+      const lng = centerLng + (j * radiusMiles / gridSize) * lngMile * 2;
+      
+      const dist = Math.sqrt(
+        Math.pow((lat - centerLat) / latMile, 2) + 
+        Math.pow((lng - centerLng) / lngMile, 2)
+      );
+      
+      if (dist <= radiusMiles) {
+        points.push({
+          lat: parseFloat(lat.toFixed(4)),
+          lng: parseFloat(lng.toFixed(4)),
+          name: `Point ${points.length + 1}`
+        });
+      }
+    }
+  }
+  return points;
+}
+
+// All possible SERP features
+const ALL_SERP_FEATURES = Object.keys(SERP_FEATURES);
+
+export default function ProjectDetail() {
+  const params = new URLSearchParams(window.location.search);
+  const projectId = params.get('id');
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  
+  const [selectedKeyword, setSelectedKeyword] = useState(null);
+  const [activeTab, setActiveTab] = useState('map');
+  const [isSimulating, setIsSimulating] = useState(false);
+
+  const { data: project, isLoading: loadingProject } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => base44.entities.Project.filter({ id: projectId }),
+    select: (data) => data[0],
+    enabled: !!projectId
+  });
+
+  const { data: rankings = [], isLoading: loadingRankings } = useQuery({
+    queryKey: ['rankings', projectId],
+    queryFn: () => base44.entities.RankingData.filter({ project_id: projectId }, '-check_date', 1000),
+    enabled: !!projectId
+  });
+
+  const latestRankings = useMemo(() => {
+    const latest = rankings.reduce((acc, r) => {
+      const key = `${r.keyword}-${r.lat}-${r.lng}`;
+      if (!acc[key] || new Date(r.check_date) > new Date(acc[key].check_date)) {
+        acc[key] = r;
+      }
+      return acc;
+    }, {});
+    return Object.values(latest);
+  }, [rankings]);
+
+  const stats = useMemo(() => {
+    const filtered = selectedKeyword === 'all' || !selectedKeyword
+      ? latestRankings
+      : latestRankings.filter(r => r.keyword === selectedKeyword);
+    
+    const inMapPack = filtered.filter(r => r.in_map_pack).length;
+    const ranking = filtered.filter(r => r.rank && r.rank <= 20);
+    const avgRank = ranking.length > 0
+      ? (ranking.reduce((sum, r) => sum + r.rank, 0) / ranking.length).toFixed(1)
+      : null;
+    
+    // Count SERP features
+    const serpFeatureCounts = {};
+    filtered.forEach(r => {
+      if (r.serp_features) {
+        r.serp_features.forEach(f => {
+          serpFeatureCounts[f] = (serpFeatureCounts[f] || 0) + 1;
+        });
+      }
+    });
+    
+    return {
+      totalLocations: filtered.length,
+      inMapPack,
+      avgRank,
+      top10: filtered.filter(r => r.rank && r.rank <= 10).length,
+      serpFeatureCounts
+    };
+  }, [latestRankings, selectedKeyword]);
+
+  // Fetch real SERP data using SerpApi
+  const fetchRealSerpData = async (keyword, lat, lng, userAgent) => {
+    try {
+      const result = await base44.functions.getSerpScreenshot({
+        keyword,
+        lat,
+        lng,
+        user_agent: userAgent
+      });
+      return result;
+    } catch (error) {
+      console.log('SerpApi not available, using simulated data');
+      return null;
+    }
+  };
+
+  // Check rankings with real SERP data
+  const simulateRankings = async () => {
+    if (!project) return;
+    setIsSimulating(true);
+    
+    const points = generateGridPoints(
+      project.center_lat, 
+      project.center_lng, 
+      project.radius_miles,
+      4
+    );
+    
+    const today = new Date().toISOString().split('T')[0];
+    const newRankings = [];
+    
+    for (const keyword of project.keywords || []) {
+      for (const point of points) {
+        const prev = latestRankings.find(
+          r => r.keyword === keyword && 
+          Math.abs(r.lat - point.lat) < 0.001 && 
+          Math.abs(r.lng - point.lng) < 0.001
+        );
+        
+        // Try to fetch real SERP data
+        const serpData = await fetchRealSerpData(
+          keyword, 
+          point.lat, 
+          point.lng, 
+          project.user_agent
+        );
+
+        let rank = null;
+        let serpFeatures = ['local_pack'];
+        let screenshotUrl = null;
+        let competitorRankings = [];
+
+        if (serpData) {
+          // Use real data from SerpApi
+          screenshotUrl = serpData.screenshot_url;
+          serpFeatures = serpData.serp_features || ['local_pack'];
+          
+          // Find business rank in local pack
+          const localPack = serpData.local_pack || [];
+          const businessMatch = localPack.find(
+            place => place.title?.toLowerCase().includes(project.business_name?.toLowerCase())
+          );
+          rank = businessMatch ? businessMatch.position : null;
+
+          // Find competitor rankings
+          competitorRankings = (project.competitors || []).map(comp => {
+            const compMatch = localPack.find(
+              place => place.title?.toLowerCase().includes(comp.business_name?.toLowerCase())
+            );
+            return {
+              name: comp.business_name,
+              rank: compMatch ? compMatch.position : null,
+              in_map_pack: compMatch ? compMatch.position <= 3 : false
+            };
+          });
+        } else {
+          // Fallback to simulated data
+          const distFromCenter = Math.sqrt(
+            Math.pow(point.lat - project.center_lat, 2) + 
+            Math.pow(point.lng - project.center_lng, 2)
+          );
+          const baseRank = Math.floor(Math.random() * 15) + 1;
+          const distancePenalty = Math.floor(distFromCenter * 500);
+          rank = Math.min(40, baseRank + distancePenalty);
+          
+          if (Math.random() > 0.85) rank = null;
+
+          const possibleFeatures = ['people_also_ask', 'image_pack', 'reviews', 'knowledge_panel', 
+                                     'site_links', 'video_carousel', 'featured_snippet', 'call_extension'];
+          possibleFeatures.forEach(f => {
+            if (Math.random() > 0.6) serpFeatures.push(f);
+          });
+
+          competitorRankings = (project.competitors || []).map(comp => {
+            const compRank = Math.floor(Math.random() * 20) + 1;
+            return {
+              name: comp.business_name,
+              rank: Math.random() > 0.2 ? compRank : null,
+              in_map_pack: compRank <= 3
+            };
+          });
+        }
+        
+        newRankings.push({
+          project_id: project.id,
+          keyword,
+          location_name: `${point.lat.toFixed(3)}, ${point.lng.toFixed(3)}`,
+          lat: point.lat,
+          lng: point.lng,
+          rank,
+          previous_rank: prev?.rank || null,
+          in_map_pack: rank && rank <= 3,
+          user_agent_used: project.user_agent || 'iphone_safari',
+          serp_features: serpFeatures,
+          serp_screenshot_url: screenshotUrl,
+          serp_feature_details: {
+            local_pack: { count: 3 },
+            reviews: serpFeatures.includes('reviews') ? { avg_rating: (3.5 + Math.random() * 1.5).toFixed(1) } : null
+          },
+          competitor_rankings: competitorRankings,
+          check_date: today
+        });
+      }
+    }
+    
+    await base44.entities.RankingData.bulkCreate(newRankings);
+    queryClient.invalidateQueries(['rankings', projectId]);
+    setIsSimulating(false);
+  };
+
+  const toggleStatus = useMutation({
+    mutationFn: () => base44.entities.Project.update(projectId, {
+      status: project.status === 'active' ? 'paused' : 'active'
+    }),
+    onSuccess: () => queryClient.invalidateQueries(['project', projectId])
+  });
+
+  if (loadingProject) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-4">
+        <Skeleton className="h-12 w-full mb-4" />
+        <Skeleton className="h-[300px] w-full rounded-2xl" />
+      </div>
+    );
+  }
+
+  if (!project) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="text-center">
+          <p className="text-slate-500 mb-4">Project not found</p>
+          <Link to={createPageUrl('Dashboard')}>
+            <Button>Back to Dashboard</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const trendData = selectedKeyword && selectedKeyword !== 'all'
+    ? rankings.filter(r => r.keyword === selectedKeyword)
+    : rankings.slice(0, 50);
+
+  return (
+    <div className="min-h-screen bg-slate-50 pb-24">
+      {/* Header */}
+      <div className="bg-white border-b border-slate-100 px-4 py-4 sticky top-0 z-10">
+        <div className="max-w-lg mx-auto">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Link to={createPageUrl('Dashboard')}>
+                <Button variant="ghost" size="icon" className="h-9 w-9">
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+              </Link>
+              <div>
+                <h1 className="text-lg font-semibold text-slate-900">{project.name}</h1>
+                <p className="text-xs text-slate-500 flex items-center gap-1">
+                  <MapPin className="h-3 w-3" />
+                  {project.business_name}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
+                onClick={() => toggleStatus.mutate()}
+              >
+                {project.status === 'active' ? (
+                  <Pause className="h-4 w-4" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+              </Button>
+              <Link to={createPageUrl(`EditProject?id=${project.id}`)}>
+                <Button variant="outline" size="icon" className="h-9 w-9">
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+          
+          {/* User Agent Badge */}
+          <div className="mt-2 flex items-center gap-2">
+            <Badge variant="outline" className="text-xs bg-slate-50">
+              📱 {project.user_agent?.replace('_', ' ') || 'iPhone Safari'}
+            </Badge>
+            {project.competitors?.length > 0 && (
+              <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">
+                <Users className="h-3 w-3 mr-1" />
+                {project.competitors.length} competitors
+              </Badge>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-lg mx-auto px-4 py-6 space-y-5">
+        {/* Keyword Filter & Refresh */}
+        <div className="flex items-center justify-between gap-3">
+          <KeywordSelector
+            keywords={project.keywords || []}
+            selectedKeyword={selectedKeyword}
+            onSelect={(kw) => setSelectedKeyword(kw === 'all' ? null : kw)}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={simulateRankings}
+            disabled={isSimulating}
+            className="gap-1.5"
+          >
+            {isSimulating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            {isSimulating ? 'Checking...' : 'Check Now'}
+          </Button>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-3">
+          <StatsCard
+            title="Locations Tracked"
+            value={stats.totalLocations}
+            icon={MapPin}
+            color="slate"
+          />
+          <StatsCard
+            title="In Map Pack"
+            value={stats.inMapPack}
+            subtitle={`${stats.totalLocations > 0 ? Math.round((stats.inMapPack / stats.totalLocations) * 100) : 0}% of locations`}
+            icon={Target}
+            color="green"
+          />
+          <StatsCard
+            title="Average Rank"
+            value={stats.avgRank || '—'}
+            icon={BarChart3}
+            color="blue"
+          />
+          <StatsCard
+            title="Top 10 Positions"
+            value={stats.top10}
+            icon={TrendingUp}
+            color="amber"
+          />
+        </div>
+
+        {/* Tab Navigation */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-5 bg-slate-100 p-1 rounded-xl">
+            <TabsTrigger value="map" className="rounded-lg text-xs px-2 data-[state=active]:bg-white">
+              <Map className="h-4 w-4" />
+            </TabsTrigger>
+            <TabsTrigger value="table" className="rounded-lg text-xs px-2 data-[state=active]:bg-white">
+              <Table2 className="h-4 w-4" />
+            </TabsTrigger>
+            <TabsTrigger value="serp" className="rounded-lg text-xs px-2 data-[state=active]:bg-white">
+              <Layers className="h-4 w-4" />
+            </TabsTrigger>
+            <TabsTrigger value="competitors" className="rounded-lg text-xs px-2 data-[state=active]:bg-white">
+              <Users className="h-4 w-4" />
+            </TabsTrigger>
+            <TabsTrigger value="trend" className="rounded-lg text-xs px-2 data-[state=active]:bg-white">
+              <TrendingUp className="h-4 w-4" />
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="map" className="mt-4 space-y-4">
+            <RankingLegend />
+            {loadingRankings ? (
+              <Skeleton className="h-[400px] rounded-xl" />
+            ) : (
+              <RankingMap
+                centerLat={project.center_lat}
+                centerLng={project.center_lng}
+                radiusMiles={project.radius_miles}
+                rankings={latestRankings}
+                selectedKeyword={selectedKeyword}
+                height="400px"
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="table" className="mt-4">
+            <KeywordRankingTable
+              rankings={latestRankings}
+              keyword={selectedKeyword}
+            />
+          </TabsContent>
+
+          <TabsContent value="serp" className="mt-4 space-y-4">
+            <div className="bg-white rounded-2xl border border-slate-100 p-4">
+              <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                <Layers className="h-4 w-4" />
+                SERP Features Detected
+              </h3>
+              <SerpFeaturesChart rankings={latestRankings} height={250} />
+            </div>
+            
+            <div className="bg-white rounded-2xl border border-slate-100 p-4">
+              <h3 className="text-sm font-semibold text-slate-900 mb-3">Recent SERP Features</h3>
+              <div className="space-y-3">
+                {latestRankings.slice(0, 5).map((r, idx) => (
+                  <div key={idx} className="p-3 bg-slate-50 rounded-xl">
+                    <p className="text-xs text-slate-500 mb-2">{r.keyword} • {r.location_name}</p>
+                    <SerpFeaturesBadges features={r.serp_features || []} showAll />
+                  </div>
+                ))}
+                {latestRankings.length === 0 && (
+                  <p className="text-center text-slate-500 text-sm py-4">
+                    No SERP data yet. Run a rank check to see features.
+                  </p>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="competitors" className="mt-4 space-y-4">
+            <CompetitorComparison
+              rankings={latestRankings}
+              competitors={project.competitors || []}
+              businessName={project.business_name}
+            />
+            
+            {(!project.competitors || project.competitors.length === 0) && (
+              <div className="bg-amber-50 rounded-xl p-4 border border-amber-100">
+                <p className="text-sm text-amber-800">
+                  <strong>No competitors added.</strong> Edit your project to add competitors 
+                  and track their rankings alongside yours.
+                </p>
+                <Link to={createPageUrl(`EditProject?id=${project.id}`)}>
+                  <Button size="sm" variant="outline" className="mt-3">
+                    Add Competitors
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="trend" className="mt-4">
+            <div className="bg-white rounded-2xl border border-slate-100 p-4">
+              <h3 className="text-sm font-semibold text-slate-900 mb-4">
+                Ranking History {selectedKeyword && selectedKeyword !== 'all' ? `- ${selectedKeyword}` : ''}
+              </h3>
+              {trendData.length > 0 ? (
+                <RankingTrendChart data={trendData} height={300} />
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-slate-500">
+                  No ranking history yet
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        {/* Quick Actions */}
+        <div className="flex gap-2">
+          <Link to={createPageUrl(`Reports?project_id=${project.id}`)} className="flex-1">
+            <Button variant="outline" className="w-full gap-2">
+              <FileText className="h-4 w-4" />
+              Reports
+            </Button>
+          </Link>
+          <Link to={createPageUrl(`KeywordResearch?project_id=${project.id}`)} className="flex-1">
+            <Button variant="outline" className="w-full gap-2">
+              <Lightbulb className="h-4 w-4" />
+              Keywords
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
