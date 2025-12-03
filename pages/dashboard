@@ -1,0 +1,165 @@
+import React, { useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import { base44 } from '@/api/base44Client';
+import { useQuery } from '@tanstack/react-query';
+import { Plus, Target, TrendingUp, MapPin, Search, BarChart3 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import ProjectCard from '@/components/rank/ProjectCard';
+import StatsCard from '@/components/rank/StatsCard';
+
+export default function Dashboard() {
+  const { data: projects = [], isLoading: loadingProjects } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.list('-created_date'),
+  });
+
+  const { data: rankings = [], isLoading: loadingRankings } = useQuery({
+    queryKey: ['rankings'],
+    queryFn: () => base44.entities.RankingData.list('-check_date', 500),
+  });
+
+  const stats = useMemo(() => {
+    const activeProjects = projects.filter(p => p.status === 'active').length;
+    const totalKeywords = projects.reduce((sum, p) => sum + (p.keywords?.length || 0), 0);
+    
+    const latestRankings = rankings.reduce((acc, r) => {
+      const key = `${r.project_id}-${r.keyword}-${r.lat}-${r.lng}`;
+      if (!acc[key] || new Date(r.check_date) > new Date(acc[key].check_date)) {
+        acc[key] = r;
+      }
+      return acc;
+    }, {});
+    
+    const latestList = Object.values(latestRankings);
+    const inMapPack = latestList.filter(r => r.in_map_pack).length;
+    const rankedLocations = latestList.filter(r => r.rank && r.rank <= 20).length;
+    const avgRank = latestList.length > 0 
+      ? (latestList.reduce((sum, r) => sum + (r.rank || 40), 0) / latestList.length).toFixed(1)
+      : 0;
+
+    return {
+      activeProjects,
+      totalKeywords,
+      inMapPack,
+      rankedLocations,
+      avgRank,
+      totalLocations: latestList.length
+    };
+  }, [projects, rankings]);
+
+  const projectSummaries = useMemo(() => {
+    const summaries = {};
+    projects.forEach(p => {
+      const projectRankings = rankings.filter(r => r.project_id === p.id);
+      const latest = projectRankings.reduce((acc, r) => {
+        const key = `${r.keyword}-${r.lat}-${r.lng}`;
+        if (!acc[key] || new Date(r.check_date) > new Date(acc[key].check_date)) {
+          acc[key] = r;
+        }
+        return acc;
+      }, {});
+      const latestList = Object.values(latest);
+      
+      summaries[p.id] = {
+        avgRank: latestList.length > 0 
+          ? (latestList.reduce((sum, r) => sum + (r.rank || 40), 0) / latestList.length).toFixed(1)
+          : null,
+        inMapPackCount: latestList.filter(r => r.in_map_pack).length,
+        totalLocations: latestList.length
+      };
+    });
+    return summaries;
+  }, [projects, rankings]);
+
+  return (
+    <div className="min-h-screen bg-slate-50 pb-24">
+      {/* Header */}
+      <div className="bg-white border-b border-slate-100 px-4 py-6">
+        <div className="max-w-lg mx-auto">
+          <h1 className="text-2xl font-bold text-slate-900">Rank Tracker</h1>
+          <p className="text-sm text-slate-500 mt-1">Mobile local map pack rankings</p>
+        </div>
+      </div>
+
+      <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 gap-3">
+          <StatsCard 
+            title="Active Projects" 
+            value={loadingProjects ? '—' : stats.activeProjects}
+            icon={Target}
+            color="blue"
+          />
+          <StatsCard 
+            title="Total Keywords" 
+            value={loadingProjects ? '—' : stats.totalKeywords}
+            icon={Search}
+            color="slate"
+          />
+          <StatsCard 
+            title="In Map Pack" 
+            value={loadingRankings ? '—' : `${stats.inMapPack}/${stats.totalLocations}`}
+            subtitle="locations in top 3"
+            icon={MapPin}
+            color="green"
+          />
+          <StatsCard 
+            title="Avg. Rank" 
+            value={loadingRankings ? '—' : stats.avgRank || '—'}
+            icon={BarChart3}
+            color="amber"
+          />
+        </div>
+
+        {/* Projects Section */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-slate-900">Projects</h2>
+            <Link to={createPageUrl('NewProject')}>
+              <Button size="sm" className="gap-1.5 bg-slate-900 hover:bg-slate-800">
+                <Plus className="h-4 w-4" />
+                New Project
+              </Button>
+            </Link>
+          </div>
+
+          {loadingProjects ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => (
+                <Skeleton key={i} className="h-40 rounded-2xl" />
+              ))}
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Target className="h-8 w-8 text-slate-400" />
+              </div>
+              <h3 className="font-semibold text-slate-900 mb-2">No projects yet</h3>
+              <p className="text-sm text-slate-500 mb-4">
+                Create your first project to start tracking local rankings
+              </p>
+              <Link to={createPageUrl('NewProject')}>
+                <Button className="bg-slate-900 hover:bg-slate-800">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Project
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {projects.map(project => (
+                <ProjectCard 
+                  key={project.id} 
+                  project={project}
+                  rankingSummary={projectSummaries[project.id]}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
