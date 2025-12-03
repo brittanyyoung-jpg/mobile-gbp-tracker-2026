@@ -1,0 +1,86 @@
+import React, { useState } from 'react';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Plus, X, Users, Building2 } from 'lucide-react';
+
+export default function CompetitorInput({ competitors = [], onChange }) {
+  const [name, setName] = useState('');
+  const [businessName, setBusinessName] = useState('');
+
+  const addCompetitor = () => {
+    if (businessName.trim()) {
+      onChange([...competitors, {
+        name: name.trim() || businessName.trim(),
+        business_name: businessName.trim()
+      }]);
+      setName('');
+      setBusinessName('');
+    }
+  };
+
+  const removeCompetitor = (index) => {
+    onChange(competitors.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="space-y-3">
+      <Label className="flex items-center gap-2 text-slate-700">
+        <Users className="h-4 w-4" />
+        Competitors to Track
+      </Label>
+      
+      <div className="space-y-2">
+        <Input
+          placeholder="Competitor label (e.g., Main Competitor)"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <div className="flex gap-2">
+          <Input
+            placeholder="Google Business Profile name (exact)"
+            value={businessName}
+            onChange={(e) => setBusinessName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCompetitor())}
+            className="flex-1"
+          />
+          <Button type="button" onClick={addCompetitor} size="icon" variant="outline">
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {competitors.length > 0 && (
+        <div className="space-y-2 p-3 bg-slate-50 rounded-xl">
+          {competitors.map((comp, idx) => (
+            <div
+              key={idx}
+              className="flex items-center justify-between bg-white rounded-lg p-3 border border-slate-200"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-50 rounded-lg">
+                  <Building2 className="h-4 w-4 text-red-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-900">{comp.name}</p>
+                  <p className="text-xs text-slate-500">{comp.business_name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => removeCompetitor(idx)}
+                className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="h-4 w-4 text-slate-400 hover:text-red-500" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      
+      <p className="text-xs text-slate-500">
+        Track competitor rankings alongside your business
+      </p>
+    </div>
+  );
+}
