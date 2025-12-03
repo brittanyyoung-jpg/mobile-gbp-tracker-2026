@@ -1,0 +1,23 @@
+import React from 'react';
+import { cn } from '@/lib/utils';
+
+export default function MapMarker({ rank, isCenter = false }) {
+  const getMarkerStyle = () => {
+    if (isCenter) return 'bg-slate-900 text-white border-2 border-white shadow-lg';
+    if (!rank || rank > 20) return 'bg-slate-300 text-slate-600';
+    if (rank <= 3) return 'bg-emerald-500 text-white';
+    if (rank <= 7) return 'bg-blue-500 text-white';
+    if (rank <= 10) return 'bg-amber-500 text-white';
+    return 'bg-orange-500 text-white';
+  };
+
+  return (
+    <div className={cn(
+      'h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shadow-md',
+      'transform -translate-x-1/2 -translate-y-1/2',
+      getMarkerStyle()
+    )}>
+      {isCenter ? '★' : (rank || '—')}
+    </div>
+  );
+}
