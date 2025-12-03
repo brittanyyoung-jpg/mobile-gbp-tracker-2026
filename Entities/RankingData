@@ -1,0 +1,87 @@
+{
+  "name": "RankingData",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to project"
+    },
+    "keyword": {
+      "type": "string",
+      "description": "Tracked keyword"
+    },
+    "location_name": {
+      "type": "string",
+      "description": "Location identifier"
+    },
+    "lat": {
+      "type": "number",
+      "description": "Location latitude"
+    },
+    "lng": {
+      "type": "number",
+      "description": "Location longitude"
+    },
+    "rank": {
+      "type": "number",
+      "description": "Position in map pack (1-40)"
+    },
+    "previous_rank": {
+      "type": "number",
+      "description": "Previous position"
+    },
+    "in_map_pack": {
+      "type": "boolean",
+      "description": "Whether appearing in 3-pack"
+    },
+    "user_agent_used": {
+      "type": "string",
+      "description": "User agent used for this check"
+    },
+    "serp_features": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "SERP features present in results"
+    },
+    "serp_feature_details": {
+      "type": "object",
+      "description": "Detailed info about each SERP feature"
+    },
+    "serp_screenshot_url": {
+      "type": "string",
+      "description": "URL to SERP screenshot image"
+    },
+    "competitor_rankings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "rank": {
+            "type": "number"
+          },
+          "in_map_pack": {
+            "type": "boolean"
+          }
+        }
+      },
+      "description": "Competitor positions for this search"
+    },
+    "check_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of rank check"
+    }
+  },
+  "required": [
+    "project_id",
+    "keyword",
+    "lat",
+    "lng",
+    "check_date"
+  ]
+}
