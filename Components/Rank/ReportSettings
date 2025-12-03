@@ -1,0 +1,49 @@
+import React from 'react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Mail, Calendar } from 'lucide-react';
+
+export default function ReportSettings({ frequency, email, onFrequencyChange, onEmailChange }) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label className="flex items-center gap-2 text-slate-700">
+          <Calendar className="h-4 w-4" />
+          Automated Reports
+        </Label>
+        <Select value={frequency || 'none'} onValueChange={onFrequencyChange}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select frequency" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No automated reports</SelectItem>
+            <SelectItem value="daily">Daily Summary</SelectItem>
+            <SelectItem value="weekly">Weekly Report</SelectItem>
+            <SelectItem value="monthly">Monthly Report</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {frequency && frequency !== 'none' && (
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-slate-700">
+            <Mail className="h-4 w-4" />
+            Report Email
+          </Label>
+          <Input
+            type="email"
+            placeholder="email@example.com"
+            value={email || ''}
+            onChange={(e) => onEmailChange(e.target.value)}
+          />
+          <p className="text-xs text-slate-500">
+            {frequency === 'daily' && 'Reports sent every day at 8:00 AM'}
+            {frequency === 'weekly' && 'Reports sent every Monday at 8:00 AM'}
+            {frequency === 'monthly' && 'Reports sent on the 1st of each month'}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
