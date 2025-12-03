@@ -1,0 +1,95 @@
+{
+  "name": "Project",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Project name"
+    },
+    "business_name": {
+      "type": "string",
+      "description": "Google Business Profile name"
+    },
+    "business_address": {
+      "type": "string",
+      "description": "Business address"
+    },
+    "center_lat": {
+      "type": "number",
+      "description": "Center latitude for tracking"
+    },
+    "center_lng": {
+      "type": "number",
+      "description": "Center longitude for tracking"
+    },
+    "radius_miles": {
+      "type": "number",
+      "description": "Tracking radius in miles"
+    },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Keywords to track"
+    },
+    "competitors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "business_name": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Competitor businesses to track"
+    },
+    "user_agent": {
+      "type": "string",
+      "enum": [
+        "iphone_safari",
+        "iphone_chrome",
+        "android_chrome",
+        "android_samsung",
+        "ipad_safari",
+        "pixel_chrome"
+      ],
+      "default": "iphone_safari",
+      "description": "Mobile user agent for searches"
+    },
+    "report_frequency": {
+      "type": "string",
+      "enum": [
+        "daily",
+        "weekly",
+        "monthly",
+        "none"
+      ],
+      "default": "none",
+      "description": "Automated report frequency"
+    },
+    "report_email": {
+      "type": "string",
+      "description": "Email for automated reports"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "paused",
+        "archived"
+      ],
+      "default": "active"
+    }
+  },
+  "required": [
+    "name",
+    "business_name",
+    "center_lat",
+    "center_lng"
+  ]
+}
