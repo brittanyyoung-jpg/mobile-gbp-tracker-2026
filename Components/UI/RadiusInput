@@ -1,0 +1,46 @@
+import React from 'react';
+import { Slider } from '@/components/ui/slider';
+import { Label } from '@/components/ui/label';
+import { Target } from 'lucide-react';
+
+const presetRadii = [3, 5, 10, 15, 20];
+
+export default function RadiusInput({ value, onChange }) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <Label className="flex items-center gap-2 text-slate-700">
+          <Target className="h-4 w-4" />
+          Tracking Radius
+        </Label>
+        <span className="text-lg font-bold text-blue-600">{value} miles</span>
+      </div>
+      
+      <Slider
+        value={[value]}
+        onValueChange={([v]) => onChange(v)}
+        min={1}
+        max={30}
+        step={1}
+        className="py-2"
+      />
+      
+      <div className="flex gap-2">
+        {presetRadii.map((r) => (
+          <button
+            key={r}
+            type="button"
+            onClick={() => onChange(r)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              value === r 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            {r}mi
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
