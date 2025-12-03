@@ -1,0 +1,136 @@
+import React from 'react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import RankBadge from './RankBadge';
+import SerpFeaturesBadges from './SerpFeaturesBadges';
+import { MapPin, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState } from 'react';
+import { cn } from '@/lib/utils';
+
+export default function KeywordRankingTable({ rankings = [], keyword }) {
+  const [expandedRows, setExpandedRows] = useState({});
+  
+  const keywordRankings = keyword 
+    ? rankings.filter(r => r.keyword === keyword)
+    : rankings;
+
+  const groupedByKeyword = keywordRankings.reduce((acc, r) => {
+    if (!acc[r.keyword]) acc[r.keyword] = [];
+    acc[r.keyword].push(r);
+    return acc;
+  }, {});
+
+  const toggleRow = (id) => {
+    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-slate-50 hover:bg-slate-50">
+            <TableHead className="text-xs font-semibold text-slate-600">Location</TableHead>
+            <TableHead className="text-xs font-semibold text-slate-600">Keyword</TableHead>
+            <TableHead className="text-xs font-semibold text-slate-600 text-center">Rank</TableHead>
+            <TableHead className="text-xs font-semibold text-slate-600 text-center">Map Pack</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Object.entries(groupedByKeyword).map(([kw, items]) => 
+            items.map((ranking, idx) => {
+              const rowId = `${ranking.id}-${idx}`;
+              const isExpanded = expandedRows[rowId];
+              const hasSerpFeatures = ranking.serp_features?.length > 0;
+              const hasCompetitors = ranking.competitor_rankings?.length > 0;
+              
+              return (
+                <React.Fragment key={rowId}>
+                  <TableRow 
+                    className={cn(
+                      "hover:bg-slate-50/50 cursor-pointer",
+                      isExpanded && "bg-slate-50"
+                    )}
+                    onClick={() => (hasSerpFeatures || hasCompetitors) && toggleRow(rowId)}
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-slate-100 rounded-lg">
+                          <MapPin className="h-3.5 w-3.5 text-slate-500" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-slate-900">{ranking.location_name}</p>
+                          <p className="text-xs text-slate-400">
+                            {ranking.lat?.toFixed(4)}, {ranking.lng?.toFixed(4)}
+                          </p>
+                        </div>
+                        {(hasSerpFeatures || hasCompetitors) && (
+                          isExpanded 
+                            ? <ChevronUp className="h-4 w-4 text-slate-400" />
+                            : <ChevronDown className="h-4 w-4 text-slate-400" />
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm text-slate-700">{ranking.keyword}</span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex justify-center">
+                        <RankBadge rank={ranking.rank} previousRank={ranking.previous_rank} />
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {ranking.in_map_pack ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+                          ✓ Yes
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">No</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                  
+                  {isExpanded && (
+                    <TableRow className="bg-slate-50/50">
+                      <TableCell colSpan={4} className="py-3">
+                        <div className="space-y-3 pl-10">
+                          {hasSerpFeatures && (
+                            <div>
+                              <p className="text-xs font-medium text-slate-500 mb-1.5">SERP Features</p>
+                              <SerpFeaturesBadges features={ranking.serp_features} showAll />
+                            </div>
+                          )}
+                          {hasCompetitors && (
+                            <div>
+                              <p className="text-xs font-medium text-slate-500 mb-1.5">Competitor Rankings</p>
+                              <div className="flex flex-wrap gap-2">
+                                {ranking.competitor_rankings.map((comp, cidx) => (
+                                  <div 
+                                    key={cidx}
+                                    className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1"
+                                  >
+                                    <span className="text-xs text-slate-600">{comp.name}</span>
+                                    <RankBadge rank={comp.rank} size="sm" showTrend={false} />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </React.Fragment>
+              );
+            })
+          )}
+          {keywordRankings.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={4} className="text-center py-8 text-slate-500">
+                No ranking data available
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
