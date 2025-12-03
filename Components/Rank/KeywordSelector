@@ -1,0 +1,24 @@
+import React from 'react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Search } from 'lucide-react';
+
+export default function KeywordSelector({ keywords = [], selectedKeyword, onSelect }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="p-2 bg-slate-100 rounded-lg">
+        <Search className="h-4 w-4 text-slate-500" />
+      </div>
+      <Select value={selectedKeyword || 'all'} onValueChange={onSelect}>
+        <SelectTrigger className="w-[220px] border-slate-200">
+          <SelectValue placeholder="All keywords" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Keywords</SelectItem>
+          {keywords.map((kw) => (
+            <SelectItem key={kw} value={kw}>{kw}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
