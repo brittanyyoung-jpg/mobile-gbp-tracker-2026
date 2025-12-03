@@ -1,0 +1,76 @@
+import { base44 } from './base44Client.js';
+
+export default async function getSerpScreenshot({ keyword, lat, lng, user_agent }) {
+  const secrets = await base44.getSecrets(['SERPAPI_KEY']);
+  
+  if (!secrets.SERPAPI_KEY) {
+    throw new Error('SERPAPI_KEY not configured');
+  }
+
+  // Build SerpApi URL with location parameters
+  const params = new URLSearchParams({
+    api_key: secrets.SERPAPI_KEY,
+    engine: 'google',
+    q: keyword,
+    location: `${lat},${lng}`,
+    google_domain: 'google.com',
+    gl: 'us',
+    hl: 'en',
+    device: 'mobile',
+    no_cache: 'true'
+  });
+
+  // Add user agent simulation based on device type
+  if (user_agent && user_agent.includes('iphone')) {
+    params.set('device', 'mobile');
+  } else if (user_agent && user_agent.includes('android')) {
+    params.set('device', 'mobile');
+  }
+
+  const response = await fetch(`https://serpapi.com/search?${params.toString()}`);
+  
+  if (!response.ok) {
+    throw new Error(`SerpApi error: ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  // Extract local pack results and screenshot URL
+  const localPack = data.local_results?.places || data.local_results || [];
+  const screenshotUrl = data.search_metadata?.google_url || null;
+  
+  // SerpApi provides a direct screenshot via their screenshot endpoint
+  const serpScreenshotUrl = `https://serpapi.com/searches/${data.search_metadata?.id}/screenshot.png`;
+
+  return {
+    screenshot_url: serpScreenshotUrl,
+    local_pack: localPack.slice(0, 10).map((place, idx) => ({
+      position: idx + 1,
+      title: place.title,
+      rating: place.rating,
+      reviews: place.reviews,
+      address: place.address,
+      type: place.type
+    })),
+    serp_features: extractSerpFeatures(data),
+    search_url: data.search_metadata?.google_url
+  };
+}
+
+function extractSerpFeatures(data) {
+  const features = [];
+  
+  if (data.local_results) features.push('local_pack');
+  if (data.knowledge_graph) features.push('knowledge_panel');
+  if (data.answer_box) features.push('featured_snippet');
+  if (data.related_questions) features.push('people_also_ask');
+  if (data.inline_images) features.push('image_pack');
+  if (data.inline_videos) features.push('video_carousel');
+  if (data.shopping_results) features.push('shopping');
+  if (data.top_stories) features.push('top_stories');
+  if (data.twitter_results) features.push('twitter');
+  if (data.recipes_results) features.push('recipes');
+  if (data.local_results?.places?.[0]?.reviews_button) features.push('reviews');
+  
+  return features;
+}
