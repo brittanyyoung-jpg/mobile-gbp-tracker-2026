@@ -1,0 +1,42 @@
+import React from 'react';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+export default function RankBadge({ rank, previousRank, showTrend = true, size = 'md' }) {
+  const getRankColor = (r) => {
+    if (!r || r > 20) return 'bg-slate-100 text-slate-400 border-slate-200';
+    if (r <= 3) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (r <= 7) return 'bg-blue-50 text-blue-700 border-blue-200';
+    if (r <= 10) return 'bg-amber-50 text-amber-700 border-amber-200';
+    return 'bg-orange-50 text-orange-700 border-orange-200';
+  };
+
+  const getTrend = () => {
+    if (!previousRank || !rank) return null;
+    const diff = previousRank - rank;
+    if (diff > 0) return { icon: TrendingUp, color: 'text-emerald-500', value: `+${diff}` };
+    if (diff < 0) return { icon: TrendingDown, color: 'text-red-500', value: diff };
+    return { icon: Minus, color: 'text-slate-400', value: '0' };
+  };
+
+  const trend = getTrend();
+  const sizeClasses = size === 'sm' ? 'h-6 w-6 text-xs' : size === 'lg' ? 'h-10 w-10 text-lg' : 'h-8 w-8 text-sm';
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className={cn(
+        'rounded-lg border flex items-center justify-center font-semibold',
+        getRankColor(rank),
+        sizeClasses
+      )}>
+        {rank || '—'}
+      </div>
+      {showTrend && trend && (
+        <div className={cn('flex items-center gap-0.5 text-xs font-medium', trend.color)}>
+          <trend.icon className="h-3 w-3" />
+          <span>{trend.value}</span>
+        </div>
+      )}
+    </div>
+  );
+}
