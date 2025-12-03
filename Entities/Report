@@ -1,0 +1,77 @@
+{
+  "name": "Report",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to project"
+    },
+    "report_type": {
+      "type": "string",
+      "enum": [
+        "daily",
+        "weekly",
+        "monthly",
+        "custom"
+      ],
+      "description": "Type of report"
+    },
+    "date_from": {
+      "type": "string",
+      "format": "date"
+    },
+    "date_to": {
+      "type": "string",
+      "format": "date"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "avg_rank": {
+          "type": "number"
+        },
+        "rank_change": {
+          "type": "number"
+        },
+        "map_pack_percentage": {
+          "type": "number"
+        },
+        "top_keyword": {
+          "type": "string"
+        },
+        "worst_keyword": {
+          "type": "string"
+        }
+      }
+    },
+    "serp_features_summary": {
+      "type": "object",
+      "description": "Count of each SERP feature appearance"
+    },
+    "competitor_comparison": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "sent_to": {
+      "type": "string",
+      "description": "Email sent to"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "generated",
+        "sent",
+        "failed"
+      ],
+      "default": "generated"
+    }
+  },
+  "required": [
+    "project_id",
+    "report_type",
+    "date_from",
+    "date_to"
+  ]
+}
